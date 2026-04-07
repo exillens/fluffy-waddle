@@ -1,8 +1,11 @@
 import sys
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QLabel, QPushButton,
-                             QVBoxLayout, QWidget, QHBoxLayout, QDialog,
-                             QDialogButtonBox)
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QLabel, QPushButton,
+    QVBoxLayout, QWidget, QHBoxLayout, QDialog,
+    QDialogButtonBox, QProgressBar
+)
 from PyQt6.QtCore import Qt
+
 
 
 class BoosterDialog(QDialog):
@@ -111,6 +114,56 @@ class ClickerGame(QMainWindow):
         self.reset_button.clicked.connect(self.reset_progress)
         layout.addWidget(self.reset_button)
 
+        # Надпись про решающее событие (500 кликов)
+        self.event_hint = QLabel("Решающее событие произойдёт на 500 кликах")
+        self.event_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.event_hint.setStyleSheet("font-size: 12px; color: #aaa;")
+        layout.addWidget(self.event_hint)
+
+        # Индикатор-звёздочка (сначала пустой)
+        self.stars_label = QLabel("   ")
+        self.stars_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.stars_label.setStyleSheet("font-size: 12px; color: #888;")
+        layout.addWidget(self.stars_label)
+
+        # Шкала прогресса кликов (до 500)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 500)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("Клики: %v / 500")
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 3px;
+            }
+        """)
+        layout.addWidget(self.progress_bar)
+
+        # Шкала прогресса монет (3000 = 100%)
+        self.coins_progress = QProgressBar()
+        self.coins_progress.setRange(0, 3000)
+        self.coins_progress.setValue(0)
+        self.coins_progress.setTextVisible(True)
+        self.coins_progress.setFormat("До бабушки: %v / 3000 монет")
+        self.coins_progress.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #4b8cff;
+                border-radius: 3px;
+            }
+        """)
+        layout.addWidget(self.coins_progress)
+
         # Контейнер для бустеров
         self.boosters_container = QWidget()
         self.boosters_layout = QHBoxLayout()
@@ -148,47 +201,95 @@ class ClickerGame(QMainWindow):
         self.coins_label.setText(f"Монеты: {self.coins}")
         self.update_click_value_display()
 
+        # Обновляем шкалу кликов
+        self.progress_bar.setValue(min(self.total_clicks, 500))
+
+        # Обновляем шкалу монет
+        self.coins_progress.setValue(min(self.coins, 3000))
+
+        # На 500 кликах — звёздочка + смена цвета шкалы
+        if self.total_clicks == 500:
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 2px solid #FFD700;
+                    border-radius: 5px;
+                    text-align: center;
+                }
+                QProgressBar::chunk {
+                    background-color: #FFA500;
+                    border-radius: 3px;
+                }
+            """)
+            self.stars_label.setText("★")
+            self.stars_label.setStyleSheet("font-size: 16px; color: #FFD700;")
+
         self.check_story_events()
 
     def check_story_events(self):
-        if self.total_clicks == 5 and 5 not in self.showed_stories:
-            self.show_story("Привет, твой персонаж отправляется до бабушки!", ["Продолжить"])
-            self.showed_stories.add(5)
+        # 1. В начале вместо 5 кликов — 100 кликов
+        if self.total_clicks == 100 and 100 not in self.showed_stories:
+            self.show_story("Привет! Твой персонаж отправляется к бабушке по длинной дороге.", ["Продолжить"])
+            self.showed_stories.add(100)
 
+        # 2. Дракон при 15 кликах
         elif self.total_clicks == 15 and 15 not in self.showed_stories:
-            self.show_story("Ты шел по тропинке и на тебя напал дракон!\nЧтобы отбиться добей до 40 кликов",
+            self.show_story("Ты шёл по тропинке, и на тебя напал дракон!\nЧтобы отбиться, добей до 40 кликов.",
                             ["Попытаться скрыться от дракона"])
             self.showed_stories.add(15)
 
+        # 3. Победа над драконом — буст +1
         elif self.total_clicks == 40 and 40 not in self.showed_stories:
             self.boost1_unlocked = True
-            self.show_story("Поздравляю, вы одолели дракона!\nТеперь доступен буст +1 за 25 монет",
+            self.show_story("Поздравляю, ты одолел дракона!\nТеперь доступен буст +1 за 25 монет.",
                             ["Продолжить"])
             self.update_boosters_display()
             self.showed_stories.add(40)
 
+        # 4. 90 кликов — усталость
         elif self.total_clicks == 90 and 90 not in self.showed_stories:
             dialog = self.show_story("Не устал кликать?", ["Не устал", "Устал"])
             if dialog.result == "Устал":
                 self.show_story("Но ты же до сих пор кликаешь :)", ["Кликать дальше"])
             self.showed_stories.add(90)
 
-        elif self.total_clicks == 100 and 100 not in self.showed_stories:
+        # 5. 200 кликов — буст +5
+        elif self.total_clicks == 200 and 200 not in self.showed_stories:
             self.boost5_unlocked = True
             self.show_story("Теперь доступен буст +5 за 50 монет!", ["Продолжить"])
             self.update_boosters_display()
-            self.showed_stories.add(100)
+            self.showed_stories.add(200)
 
-        elif self.total_clicks == 150 and 150 not in self.showed_stories:
+        # 6. 300 кликов — бустер +10
+        elif self.total_clicks == 300 and 300 not in self.showed_stories:
             self.boost10_unlocked = True
             self.show_story("Теперь доступен буст +10 за 100 монет!", ["Продолжить"])
             self.update_boosters_display()
-            self.showed_stories.add(150)
-
-        elif self.total_clicks == 300 and 300 not in self.showed_stories:
-            self.show_story("УРА! Вы дошли до бабушки!", ["Конец игры"])
-            self.reset_progress()
             self.showed_stories.add(300)
+
+        # 7. 500 кликов — решающее событие: проход к бабушке
+        elif self.total_clicks == 500 and 500 not in self.showed_stories:
+            dialog = self.show_story(
+                "Ты сделал 500 кликов по дороге к бабушке! "
+                "\n\nХочешь купить проход к бабушке за 3000 монет "
+                "и завершить игру?",
+                ["Купить проход", "Продолжать играть"]
+            )
+            self.showed_stories.add(500)
+
+            if dialog.result == "Купить проход":
+                self.coins -= 3000
+                self.coins_label.setText(f"Монеты: {self.coins}")
+                self.show_story("Ты купил проход к бабушке! Поздравляем, ты дошёл до неё!", ["Конец игры"])
+                self.reset_progress()
+
+        # 8. Если набрал 3000 монет, но не купил проход — просто сообщение
+        elif self.coins >= 3000 and 3000 not in self.showed_stories:
+            self.show_story(
+                "Ты накопил 3000 монет! "
+                "\n\nТеперь ты можешь купить проход к бабушке на 500‑м клике.",
+                ["Продолжить"]
+            )
+            self.showed_stories.add(3000)
 
     def show_story(self, message, buttons_text):
         dialog = StoryDialog(message, buttons_text, self)
@@ -261,6 +362,22 @@ class ClickerGame(QMainWindow):
         self.boost10_unlocked = False
         self.coins_label.setText("Монеты: 0")
         self.update_boosters_display()
+        self.progress_bar.setValue(0)
+        self.coins_progress.setValue(0)
+
+        # Сброс стиля шкалы и звёздочки
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 3px;
+            }
+        """)
+        self.stars_label.setText("   ")
 
 
 def main():
