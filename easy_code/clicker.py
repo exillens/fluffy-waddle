@@ -4,6 +4,9 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QWidget, QHBoxLayout, QDialog,
     QDialogButtonBox, QProgressBar
 )
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PyQt6.QtMultimediaWidgets import QVideoWidget
+from PyQt6.QtCore import QUrl
 from PyQt6.QtCore import Qt
 
 
@@ -32,7 +35,7 @@ class StoryDialog(QDialog):
     def __init__(self, message, buttons_text, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Сюжет")
-        self.setFixedSize(400, 200)
+        self.setFixedSize(400, 300)
 
         layout = QVBoxLayout()
 
@@ -55,6 +58,65 @@ class StoryDialog(QDialog):
         self.result = text
         self.accept()
 
+class VideoWidget(QVideoWidget):
+    """Простой видеовиджет"""
+    pass
+
+
+from PyQt6.QtCore import QTimer
+
+class VideoPlayer(QWidget):
+    def __init__(self, video_path, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Победа! Видео к бабушке")
+        self.setMinimumSize(800, 600)
+        self.resize(1000, 700)
+
+        self.video_widget = QVideoWidget()
+
+        self.audio_output = QAudioOutput()
+        self.audio_output.setVolume(0.8)
+
+        self.player = QMediaPlayer()
+        self.player.setAudioOutput(self.audio_output)
+        self.player.setVideoOutput(self.video_widget)
+
+        self.pause_btn = QPushButton("|| ПАУЗА / > ПУСК")
+        self.pause_btn.clicked.connect(self.toggle_pause)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.video_widget)
+        layout.addWidget(self.pause_btn)
+        self.setLayout(layout)
+
+        self.set_video(video_path)
+
+        # Таймер на 15 секунд
+        self.timer = QTimer()
+        self.timer.setSingleShot(True)  # один раз
+        self.timer.timeout.connect(self.stop_and_close)
+
+    def set_video(self, video_path):
+        self.player.setSource(QUrl.fromLocalFile(video_path))
+
+    def play(self):
+        self.player.play()
+        self.timer.start(15000)  # 15000 мс = 15 секунд
+
+    def toggle_pause(self):
+        if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.player.pause()
+        else:
+            self.player.play()
+
+    def stop_and_close(self):
+        self.player.stop()
+        self.close()  # автоматически вызывает hide() и убирает окно
+
+    def closeEvent(self, event):
+        self.timer.stop()
+        self.player.stop()
+        event.accept()
 
 class ClickerGame(QMainWindow):
     def __init__(self):
@@ -67,11 +129,28 @@ class ClickerGame(QMainWindow):
         self.boost5_unlocked = False
         self.boost10_unlocked = False
 
+        # ---> ВИДЕОПЛЕЕР
+        self.video_player = None
+        self.video_enabled = True  # можно выключать/включать видео
+
         self.init_ui()
+
+    def show_video(self, video_path):
+        """Показывает и запускает видео (MP4) в отдельном окне."""
+        if not self.video_enabled:
+            return
+
+        if self.video_player is None:
+            self.video_player = VideoPlayer(video_path, self)
+
+        self.video_player.set_video(video_path)
+        self.video_player.show()
+        self.video_player.raise_()
+        self.video_player.play()
 
     def init_ui(self):
         self.setWindowTitle("Кликер - Путь к бабушке")
-        self.setFixedSize(400, 600)
+        self.setFixedSize(1000, 1200)
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
 
@@ -280,7 +359,8 @@ class ClickerGame(QMainWindow):
                 self.coins -= 3000
                 self.coins_label.setText(f"Монеты: {self.coins}")
                 self.show_story("Ты купил проход к бабушке! Поздравляем, ты дошёл до неё!", ["Конец игры"])
-                self.reset_progress()
+
+                self.show_video("video.mp4")
 
         # 8. Если набрал 3000 монет, но не купил проход — просто сообщение
         elif self.coins >= 3000 and 3000 not in self.showed_stories:
